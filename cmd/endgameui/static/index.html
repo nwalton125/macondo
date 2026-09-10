@@ -42,13 +42,14 @@
         </div>
       </div>
       <div id="gcgFileList"></div>
+      <div class="hint">Click a file to load the whole game — you'll be able to step through every turn once it's open.</div>
     </div>
 
     <div class="gcg-src-panel" id="gcgsrc-woogles">
       <label>Woogles game ID</label>
       <div class="row">
         <div><input id="gcgWooglesId" placeholder="e.g. abcd1234"></div>
-        <div style="flex:0"><button id="gcgWooglesFetchBtn">Fetch</button></div>
+        <div style="flex:0"><button id="gcgWooglesFetchBtn">Load game</button></div>
       </div>
     </div>
 
@@ -56,7 +57,7 @@
       <label>Cross-tables game ID</label>
       <div class="row">
         <div><input id="gcgXtId" placeholder="e.g. 1234567"></div>
-        <div style="flex:0"><button id="gcgXtFetchBtn">Fetch</button></div>
+        <div style="flex:0"><button id="gcgXtFetchBtn">Load game</button></div>
       </div>
     </div>
 
@@ -64,21 +65,8 @@
       <label>GCG URL</label>
       <div class="row">
         <div><input id="gcgWebUrl" placeholder="https://..."></div>
-        <div style="flex:0"><button id="gcgWebFetchBtn">Fetch</button></div>
+        <div style="flex:0"><button id="gcgWebFetchBtn">Load game</button></div>
       </div>
-    </div>
-
-    <div id="gcgTurnPicker" style="display:none">
-      <div class="row">
-        <div>
-          <label id="gcgTurnLabel">Turn</label>
-          <input type="range" id="gcgTurnSlider" min="0" max="0" value="0" style="width:100%">
-        </div>
-        <div style="flex:0">
-          <span id="gcgTurnValue"></span>
-        </div>
-      </div>
-      <button id="gcgLoadBtn">Load position at this turn</button>
     </div>
   </div>
 
@@ -126,13 +114,21 @@
 <div id="app">
   <div id="breadcrumb"></div>
   <div id="main">
-    <div id="leftPanel"></div>
+    <div id="leftPanel">
+      <div class="tabs" id="leftTabs" style="display:none">
+        <button data-lt="history">History</button>
+        <button data-lt="analysis" class="active">Analysis</button>
+      </div>
+      <div id="ht-content" style="display:none"></div>
+      <div id="at-content"></div>
+    </div>
     <div id="boardPanel"></div>
   </div>
 </div>
 
 <script src="/api.js"></script>
 <script src="/board.js"></script>
+<script src="/views/gamenav.js"></script>
 <script src="/views/setup.js"></script>
 <script src="/views/endgame.js"></script>
 <script src="/views/peg.js"></script>

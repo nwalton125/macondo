@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/domino14/word-golib/kwg"
 
@@ -54,13 +55,23 @@ func fetchGCGHistory(cfg *config.Config, kind GCGSource, ref string) (*pb.GameHi
 
 // loadHistoryFromWoogles fetches a game's GCG from Woogles by game ID, the
 // same endpoint the shell's `load woogles <id>` command uses.
+// gcgFetchClient bounds how long we'll wait on a third-party GCG source
+// (Woogles/cross-tables/an arbitrary URL) — without this, an unresponsive
+// or rate-limiting remote hangs the load request indefinitely with no
+// feedback to the user.
+var gcgFetchClient = &http.Client{Timeout: 20 * time.Second}
+
 func loadHistoryFromWoogles(cfg *config.Config, gameID string) (*pb.GameHistory, error) {
 	if gameID == "" {
 		return nil, errors.New("need a Woogles game id")
 	}
-	resp, err := http.Post(
-		"https://woogles.io/api/game_service.GameMetadataService/GetGCG",
-		"application/json", strings.NewReader(`{"gameId": "`+gameID+`"}`))
+	req, err := http.NewRequest("POST", "https://woogles.io/api/game_service.GameMetadataService/GetGCG",
+		strings.NewReader(`{"gameId": "`+gameID+`"}`))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := gcgFetchClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +108,7 @@ func loadHistoryFromCrossTables(cfg *config.Config, gameIDStr string) (*pb.GameH
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Macondo-EndgameUI")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := gcgFetchClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +120,7 @@ func loadHistoryFromCrossTables(cfg *config.Config, gameIDStr string) (*pb.GameH
 }
 
 func loadHistoryFromWeb(cfg *config.Config, url string) (*pb.GameHistory, error) {
-	resp, err := http.Get(url)
+	resp, err := gcgFetchClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -206,13 +217,25 @@ func modeForGame(g *game.Game) string {
 	return "peg"
 }
 
-// LoadFromGCG loads a GCG file, replays it to turnnum, and creates a new
-// session rooted at that position.
-func LoadFromGCG(cfg *config.Config, store *SessionStore, kind GCGSource, ref string, turnnum int) (*Session, *Node, error) {
+// LoadFromGCG loads a GCG game (from a file, Woogles, cross-tables, or a
+// URL) and creates a new session rooted at its first turn. The full game
+// remains attached to the session so the client can step through every
+// turn afterward (see Session.NodeForTurn/Transcript) instead of having to
+// pick a turn upfront.
+func LoadFromGCG(cfg *config.Config, store *SessionStore, kind GCGSource, ref string) (*Session, *Node, error) {
 	history, err := fetchGCGHistory(cfg, kind, ref)
 	if err != nil {
 		return nil, nil, err
 	}
+	// gcgio always resets ChallengeRule to VOID on the returned history
+	// ("since we don't know or care what it is") — but VOID makes
+	// game.ValidateMove strictly re-check word legality on every replayed
+	// play, which breaks replay of any real game containing a phony that
+	// was legitimately played and later challenged off (a PHONY_TILES_RETURNED
+	// event). Use SINGLE instead, exactly like gcgio's own parser does
+	// internally for the same reason: we're mechanically replaying an
+	// already-adjudicated log, not re-refereeing it live.
+	history.ChallengeRule = pb.ChallengeRule_SINGLE
 	lexicon := history.Lexicon
 	if lexicon == "" {
 		lexicon = cfg.GetString(config.ConfigDefaultLexicon)
@@ -226,14 +249,44 @@ func LoadFromGCG(cfg *config.Config, store *SessionStore, kind GCGSource, ref st
 	if err != nil {
 		return nil, nil, err
 	}
-	g, err := game.NewFromHistory(history, rules, turnnum)
+	g, err := game.NewFromHistory(history, rules, 0)
 	if err != nil {
 		return nil, nil, err
 	}
 	sess := NewSession(cfg, gd, g, modeForGame(g))
+	sess.SetGameSource(history, rules)
 	store.Add(sess)
 	root, _ := sess.Node(sess.RootID())
 	return sess, root, nil
+}
+
+// buildTranscript replays history turn-by-turn (using the same incremental
+// approach game.PlayToTurn uses internally) capturing each move's
+// Quackle-notated description and the running score, for a game-log view.
+func buildTranscript(history *pb.GameHistory, rules *game.GameRules) ([]TranscriptEntryDTO, error) {
+	g, err := game.NewFromHistory(history, rules, 0)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]TranscriptEntryDTO, 0, len(history.Events))
+	for t := 0; t < len(history.Events); t++ {
+		evt := history.Events[t]
+		m, err := game.MoveFromEvent(evt, g.Alphabet(), g.Board())
+		if err != nil {
+			return nil, err
+		}
+		dto := moveToDTO(m, g.Board())
+		if err := g.PlayTurn(t); err != nil {
+			return nil, err
+		}
+		entries = append(entries, TranscriptEntryDTO{
+			Turn:   t + 1,
+			Player: int(evt.PlayerIndex),
+			Move:   dto,
+			Scores: [2]int{g.PointsFor(0), g.PointsFor(1)},
+		})
+	}
+	return entries, nil
 }
 
 // LoadFromCGP parses a CGP string (used both for pasted CGP and for the

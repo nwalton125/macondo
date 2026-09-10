@@ -59,6 +59,9 @@ func (s *Server) routes(staticFS fs.FS) {
 	s.mux.HandleFunc("POST /api/sessions/cgp", s.handleNewSessionFromCGP)
 	s.mux.HandleFunc("POST /api/sessions/manual", s.handleNewSessionManual)
 
+	s.mux.HandleFunc("GET /api/sessions/{sid}/game", s.handleGameTranscript)
+	s.mux.HandleFunc("POST /api/sessions/{sid}/turn", s.handleGotoTurn)
+
 	s.mux.HandleFunc("GET /api/sessions/{sid}/nodes/{nid}", s.handleGetNode)
 	s.mux.HandleFunc("GET /api/sessions/{sid}/nodes/{nid}/legal-moves", s.handleLegalMoves)
 	s.mux.HandleFunc("POST /api/sessions/{sid}/nodes/{nid}/commit", s.handleCommit)
@@ -92,7 +95,11 @@ func (s *Server) positionResponse(sess *Session, n *Node) (PositionDTO, error) {
 	if err != nil {
 		return PositionDTO{}, err
 	}
-	return nodeToPositionDTO(n, path, players), nil
+	root, err := sess.Node(sess.RootID())
+	if err != nil {
+		return PositionDTO{}, err
+	}
+	return nodeToPositionDTO(n, path, players, root.Game.Board()), nil
 }
 
 func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request) {
@@ -127,6 +134,7 @@ func (s *Server) handleGCGSummary(w http.ResponseWriter, r *http.Request) {
 type newSessionResponse struct {
 	SessionID string      `json:"sessionId"`
 	Position  PositionDTO `json:"position"`
+	HasGame   bool        `json:"hasGame"` // true if loaded from a GCG game (turn navigation available)
 }
 
 func (s *Server) respondNewSession(w http.ResponseWriter, sess *Session, root *Node) {
@@ -135,14 +143,13 @@ func (s *Server) respondNewSession(w http.ResponseWriter, sess *Session, root *N
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, newSessionResponse{SessionID: sess.ID, Position: pos})
+	writeJSON(w, http.StatusOK, newSessionResponse{SessionID: sess.ID, Position: pos, HasGame: sess.HasGame()})
 }
 
 func (s *Server) handleNewSessionFromGCG(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Kind string `json:"kind"` // "file" (default), "woogles", "xt", or "web"
 		Ref  string `json:"ref"`  // file path, Woogles game id, cross-tables game id, or URL
-		Turn int    `json:"turn"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
@@ -152,7 +159,7 @@ func (s *Server) handleNewSessionFromGCG(w http.ResponseWriter, r *http.Request)
 	if kind == "" {
 		kind = GCGSourceFile
 	}
-	sess, root, err := LoadFromGCG(s.cfg, s.sessions, kind, req.Ref, req.Turn)
+	sess, root, err := LoadFromGCG(s.cfg, s.sessions, kind, req.Ref)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -195,6 +202,46 @@ func (s *Server) handleNewSessionManual(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	s.respondNewSession(w, sess, root)
+}
+
+func (s *Server) handleGameTranscript(w http.ResponseWriter, r *http.Request) {
+	sess, err := s.sessions.Get(r.PathValue("sid"))
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	entries, err := sess.Transcript()
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+func (s *Server) handleGotoTurn(w http.ResponseWriter, r *http.Request) {
+	sess, err := s.sessions.Get(r.PathValue("sid"))
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	var req struct {
+		Turn int `json:"turn"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	n, err := sess.NodeForTurn(req.Turn)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	pos, err := s.positionResponse(sess, n)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, pos)
 }
 
 func (s *Server) handleGetNode(w http.ResponseWriter, r *http.Request) {

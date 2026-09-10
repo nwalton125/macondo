@@ -121,7 +121,7 @@ label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 
 }
 
 #leftPanel {
-  width: 380px;
+  width: 420px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   background: var(--panel);
@@ -138,11 +138,31 @@ label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 
   overflow: auto;
 }
 
+#leftTabs { margin-bottom: 10px; }
+
+.game-nav-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.game-nav-bar .turn-indicator { flex: 1; text-align: center; font-size: 13px; color: var(--text-dim); }
+
+.game-log-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.game-log-table th { text-align: left; color: var(--text-dim); font-weight: 600; font-size: 11px; padding-bottom: 4px; }
+.game-log-table td { padding: 3px 6px; cursor: pointer; border-top: 1px solid #f0ead9; vertical-align: top; }
+.game-log-table td:empty { cursor: default; }
+.game-log-table tr:hover td:not(:empty) { background: #f5efdf; }
+.game-log-table tr.current td { background: #fdeecb; font-weight: 700; }
+.game-log-table .score-col { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.game-log-table .turn-col { color: var(--text-dim); width: 1.6em; }
+.game-log-table .attached { color: var(--text-dim); font-weight: 400; font-size: 11px; }
+
+.hint { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
+
 .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin: 14px 0 6px; }
 .section-title:first-child { margin-top: 0; }
 
-.rack-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 2px; }
-.rack-tiles { font-family: "SFMono-Regular", Menlo, monospace; letter-spacing: 2px; }
+.rack-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; font-size: 13px; margin-bottom: 4px; color: var(--text); font-weight: 600; }
+.rack-tiles {
+  font-family: "SFMono-Regular", Menlo, monospace; letter-spacing: 1px; font-weight: 700;
+  flex: 1 1 auto; text-align: right; white-space: normal; word-break: break-all;
+}
 
 .variation {
   border: 1px solid var(--border);
@@ -207,9 +227,6 @@ label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 
 .tile.preview { outline: 2px dashed var(--preview); opacity: 0.85; }
 .tile .pts { position: absolute; bottom: 1px; right: 3px; font-size: 8px; font-weight: 400; }
 
-.advanced { margin-top: 8px; }
-.advanced summary { cursor: pointer; font-size: 12px; color: var(--text-dim); }
-.advanced .row { margin-top: 6px; }
 
 .pos-meta { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
 .legend { display: flex; gap: 12px; font-size: 11px; color: var(--text-dim); margin-top: 8px; }

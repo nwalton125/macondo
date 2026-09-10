@@ -5,6 +5,9 @@
 package endgameui
 
 import (
+	"fmt"
+	"sort"
+
 	"github.com/domino14/word-golib/tilemapping"
 
 	"github.com/domino14/macondo/board"
@@ -16,13 +19,18 @@ import (
 // move.Move's accessor methods (following the same convention as
 // gameanalysis/results.go rather than trying to serialize move.Move itself).
 type MoveDTO struct {
-	Key         string  `json:"key"` // stable key, unique among a node's legal moves; used to commit
-	Description string  `json:"description"`
-	Action      string  `json:"action"`
-	Coords      string  `json:"coords,omitempty"`
-	Row         int     `json:"row"`
-	Col         int     `json:"col"`
-	Vertical    bool    `json:"vertical"`
+	Key         string `json:"key"` // stable key, unique among a node's legal moves; used to commit
+	Description string `json:"description"`
+	Action      string `json:"action"`
+	Coords      string `json:"coords,omitempty"`
+	Row         int    `json:"row"`
+	Col         int    `json:"col"`
+	Vertical    bool   `json:"vertical"`
+	// Tiles is the *positional* per-square encoding (one character per
+	// board square the play spans, '.' for a played-through square) — this
+	// is what the client indexes into to know which board square each
+	// letter lands on. It is never for display; Description already carries
+	// the human-readable Quackle-style notation ("S(MOR)G(AS)...").
 	Tiles       string  `json:"tiles,omitempty"`
 	Leave       string  `json:"leave"`
 	Score       int     `json:"score"`
@@ -37,7 +45,14 @@ func moveKey(m *move.Move) string {
 	return m.ShortDescription()
 }
 
-func moveToDTO(m *move.Move) MoveDTO {
+// moveToDTO converts a move using bd, the board state immediately *before*
+// the move is played, to render Description in Quackle-style notation —
+// maximal runs of played-through tiles wrapped in parentheses showing the
+// letters already on the board there (e.g. "S(MOR)G(AS)B(O)R(D)"). Tiles
+// stays the plain positional (dot) encoding regardless, since the client
+// indexes into it square-by-square; only Description is for display. bd is
+// unused (may be nil) for non-Play moves.
+func moveToDTO(m *move.Move, bd *board.GameBoard) MoveDTO {
 	row, col, vertical := m.CoordsAndVertical()
 	dto := MoveDTO{
 		Key:         moveKey(m),
@@ -51,11 +66,23 @@ func moveToDTO(m *move.Move) MoveDTO {
 		Equity:      m.Equity(),
 		TilesPlayed: m.TilesPlayed(),
 	}
-	if m.Action() == move.MoveTypePlay {
+	switch m.Action() {
+	case move.MoveTypePlay:
 		dto.Coords = m.BoardCoords()
-		dto.Tiles = m.TilesString()
-	} else if m.Action() == move.MoveTypeExchange {
+		dto.Tiles = m.TilesString() // positional: one char per square, '.' for played-through
+		dto.Description = fmt.Sprintf("%3v %s", dto.Coords, bd.WordWithPlaythrough(m))
+	case move.MoveTypeExchange:
 		dto.Tiles = m.TilesStringExchange()
+	case move.MoveTypePhonyTilesReturned:
+		dto.Description = fmt.Sprintf("Phony challenged off (%+d)", m.Score())
+	case move.MoveTypeChallengeBonus:
+		dto.Description = fmt.Sprintf("Challenge bonus (%+d)", m.Score())
+	case move.MoveTypeEndgameTiles:
+		dto.Description = fmt.Sprintf("Unplayed tile penalty/bonus (%+d)", m.Score())
+	case move.MoveTypeLostTileScore:
+		dto.Description = fmt.Sprintf("Lost tile score (%+d)", m.Score())
+	case move.MoveTypeLostScoreOnTime:
+		dto.Description = fmt.Sprintf("Time penalty (%+d)", m.Score())
 	}
 	return dto
 }
@@ -94,6 +121,16 @@ type CommittedMoveDTO struct {
 	Move   MoveDTO `json:"move"`
 }
 
+// TranscriptEntryDTO is one turn of a loaded game's move list (a Quackle-
+// style game log), independent of the solve-tree exploration a user builds
+// on top of any given turn.
+type TranscriptEntryDTO struct {
+	Turn   int     `json:"turn"` // 1-based
+	Player int     `json:"player"`
+	Move   MoveDTO `json:"move"`
+	Scores [2]int  `json:"scores"` // cumulative scores after this turn
+}
+
 // PositionDTO is a full snapshot of a node's position, including enough
 // per-square metadata for the browser to color tiles by who/when they were
 // committed, without it needing to replay any move logic itself.
@@ -114,7 +151,15 @@ type PositionDTO struct {
 	// on that square, or -1 if not applicable.
 	SquarePlayer [][]int `json:"squarePlayer"`
 
-	Racks       [2]string `json:"racks"`
+	// OnTurnRack is the rack of whoever is on turn — the only rack shown in
+	// the UI. The other player's rack is deliberately never sent: showing it
+	// would be information a real analyst wouldn't have. UnseenTiles is what
+	// they'd actually know instead — the bag plus the other player's rack,
+	// combined and sorted (when the bag is empty, as in a true endgame, this
+	// happens to exactly spell out the opponent's rack, which is fine: that
+	// case is genuinely deducible, not peeked at).
+	OnTurnRack  string    `json:"onTurnRack"`
+	UnseenTiles string    `json:"unseenTiles"`
 	Scores      [2]int    `json:"scores"`
 	OnTurn      int       `json:"onTurn"`
 	BagCount    int       `json:"bagCount"`
@@ -182,8 +227,10 @@ func squareMetaFromPath(dim int, path []*move.Move, players []int) ([][]int, [][
 }
 
 // nodeToPositionDTO builds a PositionDTO for a node given its full committed
-// path from the session root (path and players are parallel slices).
-func nodeToPositionDTO(n *Node, path []*move.Move, players []int) PositionDTO {
+// path from the session root (path and players are parallel slices) and the
+// root's board, needed to correctly render played-through tiles at each
+// step (rootBoard is walked forward as the path is replayed).
+func nodeToPositionDTO(n *Node, path []*move.Move, players []int, rootBoard *board.GameBoard) PositionDTO {
 	g := n.Game
 	alph := g.Alphabet()
 	rows, bonuses := boardDTO(g.Board(), alph)
@@ -203,16 +250,24 @@ func nodeToPositionDTO(n *Node, path []*move.Move, players []int) PositionDTO {
 		Path:         []CommittedMoveDTO{}, // never nil, so the client can always .map/.length it
 	}
 	for i := 0; i < 2 && i < g.NumPlayers(); i++ {
-		dto.Racks[i] = g.RackFor(i).String()
 		dto.Scores[i] = g.PointsFor(i)
 		dto.PlayerNames[i] = playerNickname(g, i)
+	}
+	dto.OnTurnRack = g.RackFor(g.PlayerOnTurn()).String()
+	dto.UnseenTiles = unseenTilesString(g)
+	var walkBoard *board.GameBoard
+	if rootBoard != nil {
+		walkBoard = rootBoard.Copy()
 	}
 	for i, m := range path {
 		dto.Path = append(dto.Path, CommittedMoveDTO{
 			Ply:    i + 1,
 			Player: players[i],
-			Move:   moveToDTO(m),
+			Move:   moveToDTO(m, walkBoard),
 		})
+		if walkBoard != nil && m.Action() == move.MoveTypePlay {
+			walkBoard.PlaceMoveTiles(m)
+		}
 	}
 	return dto
 }
@@ -222,4 +277,16 @@ func playerNickname(g *game.Game, idx int) string {
 		return h.Players[idx].Nickname
 	}
 	return ""
+}
+
+// unseenTilesString is the bag plus the off-turn player's rack, combined
+// and sorted — everything the on-turn player doesn't actually know the
+// location of. (With an empty bag, as in a true endgame, this is exactly
+// the opponent's rack; that's a legitimate deduction, not a peek.)
+func unseenTilesString(g *game.Game) string {
+	offTurn := 1 - g.PlayerOnTurn()
+	tiles := append([]tilemapping.MachineLetter(nil), g.Bag().Peek()...)
+	tiles = append(tiles, g.RackFor(offTurn).TilesOn()...)
+	sort.Slice(tiles, func(i, j int) bool { return tiles[i] < tiles[j] })
+	return tilemapping.MachineWord(tiles).UserVisible(g.Alphabet())
 }

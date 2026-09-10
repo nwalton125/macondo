@@ -222,6 +222,18 @@ func (m *Move) MoveTypeString() string {
 		return "Exchange"
 	case MoveTypeChallenge:
 		return "Challenge"
+	case MoveTypePhonyTilesReturned:
+		return "PhonyTilesReturned"
+	case MoveTypeChallengeBonus:
+		return "ChallengeBonus"
+	case MoveTypeUnsuccessfulChallengePass:
+		return "UnsuccessfulChallengePass"
+	case MoveTypeEndgameTiles:
+		return "EndgameTiles"
+	case MoveTypeLostTileScore:
+		return "LostTileScore"
+	case MoveTypeLostScoreOnTime:
+		return "LostScoreOnTime"
 	}
 	return fmt.Sprint("UNHANDLED")
 }

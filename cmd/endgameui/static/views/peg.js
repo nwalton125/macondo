@@ -3,16 +3,15 @@
 // solver's structured explanation of exactly what happens along that line.
 const PegView = (() => {
   function render(sessionId, position) {
-    const panel = document.getElementById('leftPanel');
+    const panel = document.getElementById('at-content');
     panel.innerHTML = `
-      <div class="pos-meta">
-        Pre-endgame position &middot; ${position.bagCount} tile(s) unseen &middot; on turn: player ${position.onTurn + 1}
-      </div>
+      ${App.posMetaHTML(position, `Pre-endgame position &middot; ${position.bagCount} tile(s) unseen`)}
       <div class="section-title">Solve</div>
       <div class="row">
         <div><label>Nested endgame plies</label><input id="peg-plies" type="number" value="4" style="width:70px"></div>
         <div><label>Threads (0 = auto)</label><input id="peg-threads" type="number" value="0" style="width:70px"></div>
         <div style="flex:0"><button id="peg-solve">Solve</button></div>
+        <div style="flex:0"><button id="peg-cancel" class="secondary" disabled>Cancel</button></div>
       </div>
       <div id="peg-status" style="font-size:12px;color:var(--text-dim);margin-top:8px;"></div>
       <div id="peg-results" style="margin-top:8px;"></div>
@@ -29,19 +28,37 @@ const PegView = (() => {
   async function solve(sessionId, position) {
     const status = document.getElementById('peg-status');
     const results = document.getElementById('peg-results');
+    const solveBtn = document.getElementById('peg-solve');
+    const cancelBtn = document.getElementById('peg-cancel');
     const endgamePlies = parseInt(document.getElementById('peg-plies').value, 10) || 4;
     const threads = parseInt(document.getElementById('peg-threads').value, 10) || 0;
     results.innerHTML = '';
-    status.textContent = 'Solving… (this can take a while)';
+
+    const startedAt = Date.now();
+    const tick = () => { status.textContent = `Solving… this can take a while (${Math.round((Date.now() - startedAt) / 1000)}s)`; };
+    tick();
+    const timer = setInterval(tick, 1000);
+
+    let jobId = null;
+    solveBtn.disabled = true;
+    cancelBtn.disabled = false;
+    cancelBtn.onclick = () => { if (jobId) Api.cancelJob(jobId).catch(() => {}); };
+
     try {
-      const result = await Api.solvePeg(sessionId, position.nodeId, { endgamePlies, threads }, (st) => {
-        status.textContent = st === 'pending' ? 'Solving… (this can take a while)' : st;
-      });
+      const result = await Api.solvePeg(
+        sessionId, position.nodeId, { endgamePlies, threads },
+        null,
+        (id) => { jobId = id; },
+      );
       status.textContent = `Done — ${result.plays.length} play(s)`;
       renderPlays(sessionId, position, result.plays);
     } catch (e) {
-      status.textContent = '';
+      status.textContent = 'Canceled or failed.';
       App.showError(e.message);
+    } finally {
+      clearInterval(timer);
+      solveBtn.disabled = false;
+      cancelBtn.disabled = true;
     }
   }
 

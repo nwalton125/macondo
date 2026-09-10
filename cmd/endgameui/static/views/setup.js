@@ -20,15 +20,21 @@ const SetupView = (() => {
     initManualTab(onLoaded);
   }
 
+  // loadGCG creates the session and hands off to onLoaded immediately — no
+  // turn picker here. Once loaded, the game panel lets you step through
+  // every turn (see gamenav.js).
+  async function loadGCG(onLoaded, kind, ref) {
+    if (!ref) return;
+    App.clearError();
+    try {
+      const res = await Api.newSessionFromGCG(kind, ref);
+      onLoaded(res.sessionId, res.position, res.hasGame);
+    } catch (e) { App.showError(e.message); }
+  }
+
   function initGCGTab(onLoaded) {
-    let selectedKind = 'file';
-    let selectedRef = null;
     const listBtn = document.getElementById('gcgListBtn');
     const fileListEl = document.getElementById('gcgFileList');
-    const turnPicker = document.getElementById('gcgTurnPicker');
-    const slider = document.getElementById('gcgTurnSlider');
-    const turnValue = document.getElementById('gcgTurnValue');
-    const turnLabel = document.getElementById('gcgTurnLabel');
 
     document.querySelectorAll('#tab-gcg .tabs button[data-gcgsrc]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -36,26 +42,8 @@ const SetupView = (() => {
         document.querySelectorAll('.gcg-src-panel').forEach((p) => p.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById(`gcgsrc-${btn.dataset.gcgsrc}`).classList.add('active');
-        selectedKind = btn.dataset.gcgsrc;
-        selectedRef = null;
-        turnPicker.style.display = 'none';
       });
     });
-
-    async function fetchSummary(kind, ref) {
-      App.clearError();
-      turnPicker.style.display = 'none';
-      try {
-        const summary = await Api.gcgSummary(kind, ref);
-        selectedKind = kind;
-        selectedRef = ref;
-        slider.max = summary.numTurns;
-        slider.value = summary.numTurns;
-        turnValue.textContent = summary.numTurns;
-        turnLabel.textContent = `Turn (${summary.playerNames.join(' vs ')}, ${summary.lexicon})`;
-        turnPicker.style.display = '';
-      } catch (e) { App.showError(e.message); }
-    }
 
     listBtn.addEventListener('click', async () => {
       App.clearError();
@@ -65,35 +53,20 @@ const SetupView = (() => {
         files.forEach((f) => {
           const div = document.createElement('div');
           div.textContent = f.name;
-          div.addEventListener('click', () => {
-            fileListEl.querySelectorAll('div').forEach((d) => d.classList.remove('selected'));
-            div.classList.add('selected');
-            fetchSummary('file', f.path);
-          });
+          div.addEventListener('click', () => loadGCG(onLoaded, 'file', f.path));
           fileListEl.appendChild(div);
         });
       } catch (e) { App.showError(e.message); }
     });
 
     document.getElementById('gcgWooglesFetchBtn').addEventListener('click', () => {
-      fetchSummary('woogles', document.getElementById('gcgWooglesId').value.trim());
+      loadGCG(onLoaded, 'woogles', document.getElementById('gcgWooglesId').value.trim());
     });
     document.getElementById('gcgXtFetchBtn').addEventListener('click', () => {
-      fetchSummary('xt', document.getElementById('gcgXtId').value.trim());
+      loadGCG(onLoaded, 'xt', document.getElementById('gcgXtId').value.trim());
     });
     document.getElementById('gcgWebFetchBtn').addEventListener('click', () => {
-      fetchSummary('web', document.getElementById('gcgWebUrl').value.trim());
-    });
-
-    slider.addEventListener('input', () => { turnValue.textContent = slider.value; });
-
-    document.getElementById('gcgLoadBtn').addEventListener('click', async () => {
-      if (!selectedRef) return;
-      App.clearError();
-      try {
-        const res = await Api.newSessionFromGCG(selectedKind, selectedRef, parseInt(slider.value, 10));
-        onLoaded(res.sessionId, res.position);
-      } catch (e) { App.showError(e.message); }
+      loadGCG(onLoaded, 'web', document.getElementById('gcgWebUrl').value.trim());
     });
   }
 
@@ -103,7 +76,7 @@ const SetupView = (() => {
       try {
         const cgp = document.getElementById('cgpInput').value.trim();
         const res = await Api.newSessionFromCGP(cgp);
-        onLoaded(res.sessionId, res.position);
+        onLoaded(res.sessionId, res.position, res.hasGame);
       } catch (e) { App.showError(e.message); }
     });
   }
@@ -155,7 +128,7 @@ const SetupView = (() => {
         const lexicon = document.getElementById('manualLexicon').value;
         const letterDistribution = document.getElementById('manualLD').value;
         const res = await Api.newSessionManual(rows, racks, scores, lexicon, letterDistribution);
-        onLoaded(res.sessionId, res.position);
+        onLoaded(res.sessionId, res.position, res.hasGame);
       } catch (e) { App.showError(e.message); }
     });
   }

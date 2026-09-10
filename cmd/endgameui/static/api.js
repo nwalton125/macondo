@@ -34,21 +34,26 @@ const Api = (() => {
     gcgList: (dir) => get(`/api/gcg/list?dir=${encodeURIComponent(dir)}`),
     gcgSummary: (kind, ref) => get(`/api/gcg/summary?kind=${encodeURIComponent(kind)}&ref=${encodeURIComponent(ref)}`),
 
-    newSessionFromGCG: (kind, ref, turn) => post('/api/sessions/gcg', { kind, ref, turn }),
+    newSessionFromGCG: (kind, ref) => post('/api/sessions/gcg', { kind, ref }),
     newSessionFromCGP: (cgp) => post('/api/sessions/cgp', { cgp }),
     newSessionManual: (rows, racks, scores, lexicon, letterDistribution) =>
       post('/api/sessions/manual', { rows, racks, scores, lexicon, letterDistribution }),
+
+    gameTranscript: (sid) => get(`/api/sessions/${sid}/game`),
+    gotoTurn: (sid, turn) => post(`/api/sessions/${sid}/turn`, { turn }),
 
     getNode: (sid, nid) => get(`/api/sessions/${sid}/nodes/${nid}`),
     legalMoves: (sid, nid) => get(`/api/sessions/${sid}/nodes/${nid}/legal-moves`),
     commit: (sid, nid, key) => post(`/api/sessions/${sid}/nodes/${nid}/commit`, { key }),
 
-    solveEndgame: async (sid, nid, params, onTick) => {
+    solveEndgame: async (sid, nid, params, onTick, onJobId) => {
       const { jobId } = await post(`/api/sessions/${sid}/nodes/${nid}/solve/endgame`, params);
+      if (onJobId) onJobId(jobId);
       return waitForJob(jobId, onTick);
     },
-    solvePeg: async (sid, nid, params, onTick) => {
+    solvePeg: async (sid, nid, params, onTick, onJobId) => {
       const { jobId } = await post(`/api/sessions/${sid}/nodes/${nid}/solve/peg`, params);
+      if (onJobId) onJobId(jobId);
       return waitForJob(jobId, onTick);
     },
     pegSuggest: (sid, nid, tiles) => get(`/api/sessions/${sid}/nodes/${nid}/peg/suggest?tiles=${encodeURIComponent(tiles)}`),
@@ -56,5 +61,6 @@ const Api = (() => {
       const { jobId } = await post(`/api/sessions/${sid}/nodes/${nid}/peg/trace`, { moveKey, eventuality });
       return waitForJob(jobId, onTick);
     },
+    cancelJob: (jobId) => post(`/api/jobs/${jobId}/cancel`),
   };
 })();

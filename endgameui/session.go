@@ -11,6 +11,7 @@ import (
 
 	"github.com/domino14/macondo/config"
 	"github.com/domino14/macondo/game"
+	pb "github.com/domino14/macondo/gen/api/proto/macondo"
 	"github.com/domino14/macondo/move"
 )
 
@@ -44,6 +45,14 @@ type Session struct {
 	mu     sync.Mutex
 	nodes  map[string]*Node
 	rootID string
+
+	// Set only for sessions loaded from a GCG game (file/Woogles/cross-tables/
+	// URL), enabling turn-by-turn navigation through the recorded game
+	// independent of the solve-tree (commit-based) exploration above.
+	history    *pb.GameHistory
+	rules      *game.GameRules
+	turnNodes  map[int]string // turn number -> node ID, memoized
+	transcript []TranscriptEntryDTO
 }
 
 func newID() string {
@@ -169,6 +178,95 @@ func (s *Session) Commit(nodeID, key string) (*Node, error) {
 	s.nodes[child.ID] = child
 	n.Children[key] = child.ID
 	return child, nil
+}
+
+// SetGameSource attaches the game history this session was loaded from,
+// enabling NodeForTurn/Transcript navigation. Sessions loaded from a CGP
+// string or the manual editor never call this and simply have no game to
+// navigate.
+func (s *Session) SetGameSource(history *pb.GameHistory, rules *game.GameRules) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.history = history
+	s.rules = rules
+	s.turnNodes = make(map[int]string)
+}
+
+// HasGame reports whether this session was loaded from a GCG game (as
+// opposed to a CGP string or the manual editor).
+func (s *Session) HasGame() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.history != nil
+}
+
+// NodeForTurn returns (creating and memoizing if necessary) the node
+// representing the position at the start of the given turn of this
+// session's game. Every turn is its own independent root: solve-tree
+// exploration built on one turn is untouched when navigating to another,
+// and is still there if you navigate back.
+func (s *Session) NodeForTurn(turn int) (*Node, error) {
+	s.mu.Lock()
+	if s.history == nil {
+		s.mu.Unlock()
+		return nil, errors.New("session has no associated game to navigate")
+	}
+	if id, ok := s.turnNodes[turn]; ok {
+		n := s.nodes[id]
+		s.mu.Unlock()
+		return n, nil
+	}
+	history, rules := s.history, s.rules
+	s.mu.Unlock()
+
+	g, err := game.NewFromHistory(history, rules, turn)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id, ok := s.turnNodes[turn]; ok {
+		// Someone else built this turn's node while we didn't hold the lock.
+		return s.nodes[id], nil
+	}
+	node := &Node{
+		ID:              newID(),
+		Game:            g,
+		CommittedPlayer: -1,
+		Mode:            modeForGame(g),
+		Children:        make(map[string]string),
+	}
+	s.nodes[node.ID] = node
+	s.turnNodes[turn] = node.ID
+	return node, nil
+}
+
+// Transcript returns (building and caching on first call) the full list of
+// this session's game moves, for a Quackle-style move-list/game log.
+func (s *Session) Transcript() ([]TranscriptEntryDTO, error) {
+	s.mu.Lock()
+	if s.history == nil {
+		s.mu.Unlock()
+		return nil, errors.New("session has no associated game to navigate")
+	}
+	if s.transcript != nil {
+		t := s.transcript
+		s.mu.Unlock()
+		return t, nil
+	}
+	history, rules := s.history, s.rules
+	s.mu.Unlock()
+
+	entries, err := buildTranscript(history, rules)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.transcript = entries
+	s.mu.Unlock()
+	return entries, nil
 }
 
 // SessionStore holds all sessions for the running server process.

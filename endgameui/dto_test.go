@@ -31,7 +31,7 @@ func loadTestGame(t *testing.T) *Node {
 
 func TestNodeToPositionDTOShape(t *testing.T) {
 	n := loadTestGame(t)
-	dto := nodeToPositionDTO(n, nil, nil)
+	dto := nodeToPositionDTO(n, nil, nil, n.Game.Board())
 
 	if dto.Dim != 15 {
 		t.Fatalf("expected dim 15, got %d", dto.Dim)
@@ -45,8 +45,13 @@ func TestNodeToPositionDTOShape(t *testing.T) {
 	if len(dto.Path) != 0 {
 		t.Fatalf("expected empty path at root, got %d entries", len(dto.Path))
 	}
-	if dto.Racks[0] != "ADENOOO" || dto.Racks[1] != "AHIILMM" {
-		t.Fatalf("unexpected racks: %v", dto.Racks)
+	if dto.OnTurnRack != "ADENOOO" {
+		t.Fatalf("unexpected on-turn rack: %v", dto.OnTurnRack)
+	}
+	// Bag is empty in this true-endgame fixture, so unseen tiles == the
+	// off-turn player's actual rack, exactly.
+	if dto.UnseenTiles != "AHIILMM" {
+		t.Fatalf("unexpected unseen tiles: %v", dto.UnseenTiles)
 	}
 	if dto.BagCount != 0 {
 		t.Fatalf("expected empty bag (true endgame), got %d", dto.BagCount)
@@ -61,7 +66,7 @@ func TestSquareMetaFromPathMarksPlacedTilesOnly(t *testing.T) {
 	// A minimal fake play: verifies played-through squares (tile value 0 in
 	// Tiles()) are NOT attributed to the committing ply.
 	n := loadTestGame(t)
-	dto := nodeToPositionDTO(n, nil, nil)
+	dto := nodeToPositionDTO(n, nil, nil, n.Game.Board())
 	for r := range dto.SquarePlayer {
 		for c := range dto.SquarePlayer[r] {
 			if dto.SquarePlayer[r][c] != -1 {

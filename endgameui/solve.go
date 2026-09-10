@@ -10,6 +10,7 @@ import (
 
 	"github.com/domino14/word-golib/tilemapping"
 
+	"github.com/domino14/macondo/board"
 	"github.com/domino14/macondo/endgame/negamax"
 	"github.com/domino14/macondo/game"
 	"github.com/domino14/macondo/move"
@@ -65,6 +66,12 @@ type SolveEndgameResult struct {
 	Variations []VariationDTO `json:"variations"`
 	Capped     bool           `json:"capped"`
 	RootOnTurn int            `json:"rootOnTurn"`
+	// PliesUsed is the actual plies depth this solve ran at (resolved from
+	// the request's 0/"auto" if the client didn't set one explicitly), so
+	// the client can derive a consistent depth for a child position — one
+	// fewer ply, since one move's worth of the search horizon was consumed
+	// — instead of recomputing an unrelated default there.
+	PliesUsed int `json:"pliesUsed"`
 }
 
 // SolveEndgame runs (or reuses a cached run of) the negamax endgame solver
@@ -102,7 +109,7 @@ func SolveEndgame(ctx context.Context, sess *Session, n *Node, params EndgameSol
 				vars = vars[:numLines]
 			}
 			recordMovesFromVariations(sess, n, vars)
-			return &SolveEndgameResult{Variations: vars, Capped: entry.Capped, RootOnTurn: g.PlayerOnTurn()}, nil
+			return &SolveEndgameResult{Variations: vars, Capped: entry.Capped, RootOnTurn: g.PlayerOnTurn(), PliesUsed: plies}, nil
 		}
 	}
 
@@ -122,31 +129,60 @@ func SolveEndgame(ctx context.Context, sess *Session, n *Node, params EndgameSol
 	}
 	solver.SetSolveMultipleVariations(numLines)
 
-	if _, _, err := solver.Solve(ctx, plies); err != nil {
+	val, seq, err := solver.Solve(ctx, plies)
+	if err != nil {
 		return nil, err
 	}
 
+	// solver.Variations() is only populated when solving with more than one
+	// variation (SetSolveMultipleVariations(n>1)); for the common n==1 case
+	// it stays empty, so the best line always comes from Solve()'s own
+	// return values, matching how the shell renders it (endgameSequenceString
+	// for the primary line, then "Other variations" from Variations()[1:]).
+	variations := make([]VariationDTO, 0, numLines)
+	variations = append(variations, VariationDTO{
+		FinalSpread: int(val) + g.CurrentSpread(),
+		Moves:       buildLineMoveDTOs(g.Board(), seq),
+	})
+
 	pvLines := solver.Variations()
-	variations := make([]VariationDTO, 0, len(pvLines))
-	for i := range pvLines {
+	for i := 1; i < len(pvLines); i++ {
 		pv := &pvLines[i]
 		pv.MaterializeFull()
-		vd := VariationDTO{FinalSpread: int(pv.Score()) + g.CurrentSpread(), Moves: []MoveDTO{}}
+		moves := make([]*move.Move, 0, pv.NumMoves())
 		for j := 0; j < pv.NumMoves(); j++ {
-			m := pv.Moves[j]
-			if m == nil {
+			if pv.Moves[j] == nil {
 				break
 			}
-			vd.Moves = append(vd.Moves, moveToDTO(m))
+			moves = append(moves, pv.Moves[j])
 		}
-		variations = append(variations, vd)
+		variations = append(variations, VariationDTO{
+			FinalSpread: int(pv.Score()) + g.CurrentSpread(),
+			Moves:       buildLineMoveDTOs(g.Board(), moves),
+		})
 	}
 
 	entry := &EndgameCacheEntry{NumLines: numLines, Capped: capped, Variations: variations}
 	cache.Set(cacheKey, entry)
 	recordMovesFromVariations(sess, n, variations)
 
-	return &SolveEndgameResult{Variations: variations, Capped: capped, RootOnTurn: g.PlayerOnTurn()}, nil
+	return &SolveEndgameResult{Variations: variations, Capped: capped, RootOnTurn: g.PlayerOnTurn(), PliesUsed: plies}, nil
+}
+
+// buildLineMoveDTOs converts a sequence of alternating-player moves into
+// MoveDTOs, walking a copy of rootBoard forward so each move's
+// played-through tiles are rendered against the board state as it stood
+// right before that move (Quackle-style parens, not bare dots).
+func buildLineMoveDTOs(rootBoard *board.GameBoard, moves []*move.Move) []MoveDTO {
+	bd := rootBoard.Copy()
+	dtos := make([]MoveDTO, 0, len(moves))
+	for _, m := range moves {
+		dtos = append(dtos, moveToDTO(m, bd))
+		if m.Action() == move.MoveTypePlay {
+			bd.PlaceMoveTiles(m)
+		}
+	}
+	return dtos
 }
 
 // recordMovesFromVariations re-parses the first move of every variation
@@ -186,7 +222,7 @@ func LegalMoves(sess *Session, n *Node) ([]MoveDTO, error) {
 	}
 	dtos := make([]MoveDTO, 0, len(plays))
 	for _, p := range plays {
-		dtos = append(dtos, moveToDTO(p))
+		dtos = append(dtos, moveToDTO(p, g.Board()))
 	}
 	sort.Slice(dtos, func(i, j int) bool { return dtos[i].Score > dtos[j].Score })
 	return dtos, nil
@@ -254,7 +290,7 @@ func SolvePeg(ctx context.Context, sess *Session, n *Node, params PegSolveParams
 	dtos := make([]PegPlayDTO, 0, len(plays))
 	for _, p := range plays {
 		dto := PegPlayDTO{
-			Move:        moveToDTO(p.Play),
+			Move:        moveToDTO(p.Play, g.Board()),
 			Points:      p.Points,
 			FoundLosses: p.FoundLosses,
 			Ignored:     p.Ignore,

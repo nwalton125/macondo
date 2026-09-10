@@ -1170,9 +1170,12 @@ func (g *GameBoard) ToFEN(alph *tilemapping.TileMapping) string {
 	return bd.String()
 }
 
-// MoveDescriptionWithPlaythrough shows a move description with play-through
-// tiles if appropriate.
-func (g *GameBoard) MoveDescriptionWithPlaythrough(m *move.Move) string {
+// WordWithPlaythrough renders a play's word with maximal runs of
+// play-through squares wrapped in parentheses showing the letters already
+// on the board there (Quackle-style, e.g. "S(MOR)G(AS)B(O)R(D)"), rather
+// than the bare dots move.Move.TilesString() uses for those squares. Returns
+// move.Move.ShortDescription() unchanged for non-play moves.
+func (g *GameBoard) WordWithPlaythrough(m *move.Move) string {
 	if m.MoveTypeString() != "Play" {
 		return m.ShortDescription()
 	}
@@ -1183,7 +1186,6 @@ func (g *GameBoard) MoveDescriptionWithPlaythrough(m *move.Move) string {
 		ri, ci = 1, 0
 	}
 	var ss strings.Builder
-	fmt.Fprintf(&ss, "%3v ", m.BoardCoords())
 	r, c := row, col
 	playingThru := false
 	for i := 0; i < len(tiles); i++ {
@@ -1210,4 +1212,13 @@ func (g *GameBoard) MoveDescriptionWithPlaythrough(m *move.Move) string {
 		fmt.Fprint(&ss, ")")
 	}
 	return ss.String()
+}
+
+// MoveDescriptionWithPlaythrough shows a move description with play-through
+// tiles if appropriate.
+func (g *GameBoard) MoveDescriptionWithPlaythrough(m *move.Move) string {
+	if m.MoveTypeString() != "Play" {
+		return m.ShortDescription()
+	}
+	return fmt.Sprintf("%3v %s", m.BoardCoords(), g.WordWithPlaythrough(m))
 }
