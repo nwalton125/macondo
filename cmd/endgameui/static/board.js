@@ -129,5 +129,41 @@ const Board = (() => {
     return map;
   }
 
-  return { render, previewMapForVariation };
+  // renderRack shows the given rack as a row of large physical-style tiles,
+  // e.g. below the board, Quackle-style.
+  function renderRack(container, rack) {
+    container.innerHTML = '';
+    if (!rack) return;
+    for (const ch of rack) {
+      const tile = document.createElement('div');
+      tile.className = 'tile tile-lg';
+      tile.textContent = ch.toUpperCase();
+      if (isBlankLetter(ch)) tile.style.fontStyle = 'italic';
+      container.appendChild(tile);
+    }
+  }
+
+  // renderPool shows the unseen-tile pool as one line per distinct letter,
+  // that letter repeated for its count (e.g. "EEE"), sorted and grouped —
+  // pool is expected pre-sorted so equal letters are already adjacent.
+  function renderPool(container, pool) {
+    container.innerHTML = '';
+    if (!pool) return;
+    const count = document.createElement('div');
+    count.className = 'pool-count';
+    count.textContent = `${pool.length} tile${pool.length === 1 ? '' : 's'} remaining`;
+    container.appendChild(count);
+    let i = 0;
+    while (i < pool.length) {
+      let j = i;
+      while (j < pool.length && pool[j] === pool[i]) j++;
+      const line = document.createElement('div');
+      line.className = 'pool-line';
+      line.textContent = pool.slice(i, j).toUpperCase();
+      container.appendChild(line);
+      i = j;
+    }
+  }
+
+  return { render, previewMapForVariation, renderRack, renderPool };
 })();

@@ -122,15 +122,19 @@ const App = (() => {
   function updateBoard(position, previewMap) {
     const panel = document.getElementById('boardPanel');
     Board.render(panel, position, previewMap);
+    // Rack/pool live outside the left-panel tabs (History/Analysis) so they
+    // update immediately on any real navigation — turn nav, breadcrumb
+    // jumps, committing into a subline — regardless of which tab is
+    // showing. They intentionally don't change on a mere hover-preview of
+    // an uncommitted variation, since previewMap doesn't change `position`.
+    Board.renderRack(document.getElementById('rackBar'), position.onTurnRack);
+    Board.renderPool(document.getElementById('poolPanel'), position.unseenTiles);
   }
 
   // Shared "who's playing, what's the score" header used at the top of both
-  // the endgame and peg left panels. Deliberately shows only the on-turn
-  // player's rack — never the opponent's — since that's information a real
-  // analyst wouldn't have. In its place: the unseen-tile pool (bag + the
-  // opponent's rack, combined), which is what you'd actually be reasoning
-  // about. With an empty bag that pool happens to spell out the opponent's
-  // exact rack — a legitimate deduction, not a peek.
+  // the endgame and peg left panels. Rack and unseen tiles aren't shown
+  // here anymore — they're always visible now (rack bar under the board,
+  // pool panel on the right), independent of which left-panel tab is open.
   function posMetaHTML(position, extraLine) {
     const scoreRow = (i) => {
       const name = position.playerNames[i] || `Player ${i + 1}`;
@@ -139,14 +143,6 @@ const App = (() => {
     };
     return `<div class="pos-meta">
       ${scoreRow(0)}${scoreRow(1)}
-      <div class="rack-row" style="margin-top:4px">
-        <span>Rack (on turn)</span>
-        <span class="rack-tiles">${escapeHtml(position.onTurnRack || '(empty)')}</span>
-      </div>
-      <div class="rack-row">
-        <span>Unseen tiles</span>
-        <span class="rack-tiles">${escapeHtml(position.unseenTiles || '(none)')}</span>
-      </div>
       <div style="margin-top:4px">${extraLine}</div>
     </div>`;
   }
