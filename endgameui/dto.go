@@ -78,9 +78,19 @@ func moveToDTO(m *move.Move, bd *board.GameBoard) MoveDTO {
 	case move.MoveTypeChallengeBonus:
 		dto.Description = fmt.Sprintf("Challenge bonus (%+d)", m.Score())
 	case move.MoveTypeEndgameTiles:
-		dto.Description = fmt.Sprintf("Unplayed tile penalty/bonus (%+d)", m.Score())
+		// The bonus for going out: m.Tiles() is the *opponent's* leftover
+		// rack (its value, doubled, is the score here). Shown unbracketed —
+		// this stays merged into the going-out player's own play cell in
+		// the game log, which brackets it there.
+		dto.Description = fmt.Sprintf("%s (%+d)", m.TilesStringExchange(), m.Score())
 	case move.MoveTypeLostTileScore:
-		dto.Description = fmt.Sprintf("Lost tile score (%+d)", m.Score())
+		// The flip side: this player's own leftover rack, deducted. Unlike
+		// EndgameTiles this doesn't belong to any specific play (it shows
+		// up even when the game ends via six consecutive scoreless turns,
+		// with one of these per player and no final play at all), so it's
+		// bracketed here and stands as its own game-log entry rather than
+		// being merged into an unrelated preceding move.
+		dto.Description = fmt.Sprintf("[%s (%+d)]", m.TilesStringExchange(), m.Score())
 	case move.MoveTypeLostScoreOnTime:
 		dto.Description = fmt.Sprintf("Time penalty (%+d)", m.Score())
 	}

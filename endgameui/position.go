@@ -275,6 +275,12 @@ func buildTranscript(history *pb.GameHistory, rules *game.GameRules) ([]Transcri
 		if err != nil {
 			return nil, err
 		}
+		// The end-of-game bonus/penalty pseudo-moves (move.NewBonusScoreMove
+		// / move.NewLostScoreMove, used for GameEvent_END_RACK_PTS/
+		// _END_RACK_PENALTY etc.) never get an alphabet set by either
+		// constructor or by MoveFromEvent, so any alphabet-dependent string
+		// method on them (which we need, to show their tiles) panics.
+		m.SetAlphabet(g.Alphabet())
 		dto := moveToDTO(m, g.Board())
 		if err := g.PlayTurn(t); err != nil {
 			return nil, err

@@ -5,13 +5,16 @@
 // solve-tree exploration you build on top of whichever turn you land on.
 const GameNav = (() => {
   // Event types that describe something happening to the *previous* move
-  // rather than a move of their own (a challenged-off phony, a challenge
-  // bonus, end-of-game tile penalties/bonuses) — folded into that move's
-  // cell instead of getting their own row, matching Quackle's
-  // "[Challenged Off]" style annotation.
+  // by the same player (a challenged-off phony, a challenge bonus, the
+  // going-out bonus, a time penalty) — folded into that move's cell
+  // instead of getting their own row, matching Quackle's "[Challenged
+  // Off]" style annotation. LostTileScore is deliberately NOT here: it
+  // doesn't belong to any specific play (it also happens on its own when
+  // the game ends via six consecutive scoreless turns, one per player,
+  // with no final play at all), so it stands as its own primary entry —
+  // its Description already comes pre-bracketed from the server for that.
   const ATTACHED_TYPES = new Set([
-    'PhonyTilesReturned', 'ChallengeBonus', 'EndgameTiles',
-    'LostTileScore', 'LostScoreOnTime',
+    'PhonyTilesReturned', 'ChallengeBonus', 'EndgameTiles', 'LostScoreOnTime',
   ]);
 
   let sessionId = null;
