@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Macondo Endgame Analyzer</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header>
+  <h1>Macondo Endgame Analyzer</h1>
+  <span class="sub" id="headerSub"></span>
+  <span style="flex:1"></span>
+  <button class="secondary small" id="newPositionBtn">New position</button>
+</header>
+
+<div id="error-banner"></div>
+
+<div id="setup">
+  <div class="tabs">
+    <button data-tab="gcg" class="active">Load GCG</button>
+    <button data-tab="cgp">Paste CGP</button>
+    <button data-tab="manual">Manual board</button>
+  </div>
+
+  <div class="setup-panel active" id="tab-gcg">
+    <div class="tabs" style="margin-bottom:4px">
+      <button data-gcgsrc="file" class="active">Local file</button>
+      <button data-gcgsrc="woogles">Woogles game</button>
+      <button data-gcgsrc="xt">Cross-tables game</button>
+      <button data-gcgsrc="web">URL</button>
+    </div>
+
+    <div class="gcg-src-panel active" id="gcgsrc-file">
+      <div class="row">
+        <div>
+          <label>Directory containing .gcg files</label>
+          <input id="gcgDir" value="gcgio/testdata">
+        </div>
+        <div style="flex:0">
+          <button id="gcgListBtn">List</button>
+        </div>
+      </div>
+      <div id="gcgFileList"></div>
+    </div>
+
+    <div class="gcg-src-panel" id="gcgsrc-woogles">
+      <label>Woogles game ID</label>
+      <div class="row">
+        <div><input id="gcgWooglesId" placeholder="e.g. abcd1234"></div>
+        <div style="flex:0"><button id="gcgWooglesFetchBtn">Fetch</button></div>
+      </div>
+    </div>
+
+    <div class="gcg-src-panel" id="gcgsrc-xt">
+      <label>Cross-tables game ID</label>
+      <div class="row">
+        <div><input id="gcgXtId" placeholder="e.g. 1234567"></div>
+        <div style="flex:0"><button id="gcgXtFetchBtn">Fetch</button></div>
+      </div>
+    </div>
+
+    <div class="gcg-src-panel" id="gcgsrc-web">
+      <label>GCG URL</label>
+      <div class="row">
+        <div><input id="gcgWebUrl" placeholder="https://..."></div>
+        <div style="flex:0"><button id="gcgWebFetchBtn">Fetch</button></div>
+      </div>
+    </div>
+
+    <div id="gcgTurnPicker" style="display:none">
+      <div class="row">
+        <div>
+          <label id="gcgTurnLabel">Turn</label>
+          <input type="range" id="gcgTurnSlider" min="0" max="0" value="0" style="width:100%">
+        </div>
+        <div style="flex:0">
+          <span id="gcgTurnValue"></span>
+        </div>
+      </div>
+      <button id="gcgLoadBtn">Load position at this turn</button>
+    </div>
+  </div>
+
+  <div class="setup-panel" id="tab-cgp">
+    <label>CGP string</label>
+    <textarea class="cgp-input" id="cgpInput" placeholder="board/rows rack1/rack2 score1/score2 0 lex NWL23;"></textarea>
+    <button id="cgpLoadBtn">Load position</button>
+  </div>
+
+  <div class="setup-panel" id="tab-manual">
+    <div class="row">
+      <div>
+        <label>Lexicon</label>
+        <select id="manualLexicon"></select>
+      </div>
+      <div>
+        <label>Letter distribution</label>
+        <select id="manualLD"></select>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Rack 1 (on turn)</label>
+        <input id="manualRack1" maxlength="7" placeholder="e.g. AEINRST">
+      </div>
+      <div>
+        <label>Rack 2</label>
+        <input id="manualRack2" maxlength="7" placeholder="e.g. AEINRST">
+      </div>
+      <div>
+        <label>Score 1</label>
+        <input id="manualScore1" type="number" value="0" style="width:70px">
+      </div>
+      <div>
+        <label>Score 2</label>
+        <input id="manualScore2" type="number" value="0" style="width:70px">
+      </div>
+    </div>
+    <label>Board (type letters; lowercase = blank; leave empty)</label>
+    <div style="overflow:auto"><table id="manualGrid"></table></div>
+    <button id="manualLoadBtn">Load position</button>
+  </div>
+</div>
+
+<div id="app">
+  <div id="breadcrumb"></div>
+  <div id="main">
+    <div id="leftPanel"></div>
+    <div id="boardPanel"></div>
+  </div>
+</div>
+
+<script src="/api.js"></script>
+<script src="/board.js"></script>
+<script src="/views/setup.js"></script>
+<script src="/views/endgame.js"></script>
+<script src="/views/peg.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

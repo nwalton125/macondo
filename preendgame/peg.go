@@ -362,7 +362,7 @@ func (p *PreEndgamePlay) TotalOutcomes() int {
 }
 
 type inFlightPermInfo struct {
-	play            string
+	play string
 	// Raw tile data instead of pre-formatted strings; strings are computed
 	// lazily in the 60-second status ticker to avoid per-perm allocs.
 	permInBag       []tilemapping.MachineLetter
@@ -426,23 +426,23 @@ type Solver struct {
 	avoidPruneMoves  []*move.Move
 	leaveCalc        equity.Leaves
 
-	earlyCutoffOptim bool
-	maxTilesLeft     int // -1 = no limit; skip plays leaving more than this many tiles in the bag. default 1
-	skipTiebreaker   bool
-	skipLossOptim        bool
-	iterativeDeepening   bool
-	nestedDepthLimit     int  // -1 = unlimited; default 1
-	skipDeepPass         bool // default true; forwarded to endgame solvers
+	earlyCutoffOptim   bool
+	maxTilesLeft       int // -1 = no limit; skip plays leaving more than this many tiles in the bag. default 1
+	skipTiebreaker     bool
+	skipLossOptim      bool
+	iterativeDeepening bool
+	nestedDepthLimit   int  // -1 = unlimited; default 1
+	skipDeepPass       bool // default true; forwarded to endgame solvers
 
-	numEndgamesSolved        atomic.Uint64
-	totalPerms               atomic.Uint32
-	numCutoffs               atomic.Uint64
-	numNestedCalls           atomic.Uint64
-	numSubPermsEvaluated     atomic.Uint64
-	maxNestedDepth           atomic.Uint64
-	nestedCacheHits          atomic.Uint64
-	nestedCacheMisses        atomic.Uint64
-	numNestedByBagSize       [InBagMaxLimit + 1]atomic.Uint64
+	numEndgamesSolved    atomic.Uint64
+	totalPerms           atomic.Uint32
+	numCutoffs           atomic.Uint64
+	numNestedCalls       atomic.Uint64
+	numSubPermsEvaluated atomic.Uint64
+	maxNestedDepth       atomic.Uint64
+	nestedCacheHits      atomic.Uint64
+	nestedCacheMisses    atomic.Uint64
+	numNestedByBagSize   [InBagMaxLimit + 1]atomic.Uint64
 	potentialWinnerMutex sync.RWMutex
 	minPotentialLosses   float32
 
@@ -462,11 +462,11 @@ type Solver struct {
 	arenas []*tinymove.SmallMoveArena
 
 	// Debug trace fields — zero-valued means tracing disabled.
-	traceWriter          io.Writer
+	traceWriter        io.Writer
 	traceTargetBagTail tilemapping.MachineWord // draw-order bag tiles to match (first drawn first)
-	traceOnce            bool
-	traceSeenMatch       atomic.Bool
-	traceMu              sync.Mutex
+	traceOnce          bool
+	traceSeenMatch     atomic.Bool
+	traceMu            sync.Mutex
 
 	// Eventuality explanation (single-thread, single-perm diagnostic mode).
 	// Active only when explainResult != nil. All collection sites are guarded.
@@ -540,11 +540,11 @@ func (s *Solver) SetLogStream(l io.Writer) {
 	s.logStream = l
 }
 
-func (s *Solver) SetTraceWriter(w io.Writer)        { s.traceWriter = w }
+func (s *Solver) SetTraceWriter(w io.Writer) { s.traceWriter = w }
 func (s *Solver) SetTraceTargetBagTail(tail tilemapping.MachineWord) {
 	s.traceTargetBagTail = tail
 }
-func (s *Solver) SetTraceOnce(once bool)            { s.traceOnce = once }
+func (s *Solver) SetTraceOnce(once bool) { s.traceOnce = once }
 
 // SubPermExplanation captures one row of the per-bag-tile outcome table
 // computed by a nested sub-PEG.
@@ -573,13 +573,13 @@ type NestedLevelExplanation struct {
 // outer-perm verdict, populated during eventuality-mode solve.
 type EventualityExplanation struct {
 	// Stage 1 — our outer play
-	OurPlay      string // e.g. "13M P(AH)"
-	OurScore     int
+	OurPlay       string // e.g. "13M P(AH)"
+	OurScore      int
 	OurRackBefore string // rack before outer play
-	OurRackAfter string // rack after outer play and draw
-	BagBefore    string // bag at outer-perm entry
-	BagAfter     string // bag after our play and draw
-	OppRack      string // opp rack at outer-perm entry
+	OurRackAfter  string // rack after outer play and draw
+	BagBefore     string // bag at outer-perm entry
+	BagAfter      string // bag after our play and draw
+	OppRack       string // opp rack at outer-perm entry
 
 	// Stage 2 — opp replies
 	TotalOppReplies int    // count of opp replies tried
@@ -951,6 +951,9 @@ func (s *Solver) SetThreads(t int) {
 	s.threadNestedCalls = make([]uint64, t)
 	s.threadMaxNestedDepth = make([]uint64, t)
 	s.threadSubPermsEvaluated = make([]uint64, t)
+	s.threadEndgamesSolved = make([]atomic.Uint64, t)
+	s.threadNestedBagSize = make([]atomic.Int32, t)
+	s.inFlightPerms = make([]inFlightPermInfo, t)
 }
 
 func MoveTilesToBeginning(order []tilemapping.MachineLetter, bag *tilemapping.Bag) {

@@ -1,8 +1,8 @@
 everything: all wasm
 
-all: macondo_shell macondo_bot bot_shell mlproducer analyzer_worker
+all: macondo_shell macondo_bot bot_shell mlproducer analyzer_worker endgameui
 
-.PHONY: wasm
+.PHONY: wasm endgameui
 
 build-MacondoLambdaFunction:
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap cmd/lambda/main.go
@@ -31,6 +31,9 @@ inferdiag:
 
 taufit:
 	go build -trimpath -o bin/taufit cmd/taufit/main.go
+
+endgameui:
+	go build -trimpath -o bin/endgameui cmd/endgameui/main.go
 
 # wasm:
 # 	GOOS=js GOARCH=wasm go build -trimpath -o ../liwords/liwords-ui/public/wasm/macondo.wasm wasm/*.go
